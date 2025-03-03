@@ -6,3 +6,81 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+/* RPG Inventory Plugin Styles */
+
+.rpg-inventory-coins,
+.inventory-coins,
+.shop-coins {
+    background-color: var(--background-secondary);
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.inventory-coins h3,
+.shop-coins h3 {
+    margin: 0;
+    color: gold;
+}
+
+.inventory-container,
+.shop-container,
+.rpg-inventory-list {
+    background-color: var(--background-primary-alt);
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.inventory-container table,
+.shop-container table,
+.rpg-inventory-list table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.inventory-container th,
+.shop-container th,
+.rpg-inventory-list th {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    color: var(--text-accent);
+}
+
+.inventory-container td,
+.shop-container td,
+.rpg-inventory-list td {
+    padding: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.inventory-container button,
+.shop-container button {
+    margin-right: 5px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: var(--interactive-normal);
+    color: var(--text-normal);
+    cursor: pointer;
+    border: none;
+}
+
+.inventory-container button:hover,
+.shop-container button:hover {
+    background-color: var(--interactive-hover);
+}
+
+button.mod-cta {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    margin-right: 10px;
+}
+
+button.mod-cta:hover {
+    background-color: var(--interactive-accent-hover);
+}
