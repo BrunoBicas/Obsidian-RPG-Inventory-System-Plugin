@@ -31,7 +31,7 @@ class RPGInventoryPlugin extends Plugin {
 
         // Add ribbon icon to open shop selection
         this.addRibbonIcon('backpack', 'RPG System', () => {
-            new ShopSelectionModal(this.app, this).open();
+            new InventoryModal(this.app, this).open();
         });
 
         // Register view for inventory
@@ -181,6 +181,13 @@ class InventoryModal extends Modal {
             } else {
                 new Notice("You found nothing this time. Try again!");
             }
+        });
+        
+        // Add return to shop selection button
+        const returnButton = contentEl.createEl('button', { text: 'Return to Shop Selection' });
+        returnButton.addEventListener('click', () => {
+            this.close();
+            new ShopSelectionModal(this.app, this.plugin).open();
         });
     }
 
