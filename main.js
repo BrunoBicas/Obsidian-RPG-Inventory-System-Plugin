@@ -428,3 +428,4 @@ const DEFAULT_SETTINGS = {
 };
 
 module.exports = RPGInventoryPlugin;
+saved
