@@ -331,55 +331,40 @@ class RPGInventorySettingTab extends PluginSettingTab {
 
         containerEl.createEl('h2', { text: 'RPG Inventory Settings' });
         containerEl.createEl('h3', { text: 'Item Folders' });
-        // Display current folders with delete buttons
-    const folderList = containerEl.createEl('div', { cls: 'rpg-inventory-folder-list' });
-    
-    this.plugin.settings.itemFolderPaths.forEach((path, index) => {
-        const folderDiv = folderList.createEl('div', { cls: 'rpg-inventory-folder-item' });
-        folderDiv.createEl('span', { text: path });
         
-        const deleteButton = folderDiv.createEl('button', { text: 'Remove' });
-        deleteButton.addEventListener('click', async () => {
-            this.plugin.settings.itemFolderPaths.splice(index, 1);
-            await this.plugin.saveSettings();
-            this.display(); // Refresh settings panel
+        // Display current folders with delete buttons
+        const folderList = containerEl.createEl('div', { cls: 'rpg-inventory-folder-list' });
+        
+        this.plugin.settings.itemFolderPaths.forEach((path, index) => {
+            const folderDiv = folderList.createEl('div', { cls: 'rpg-inventory-folder-item' });
+            folderDiv.createEl('span', { text: path });
+            
+            const deleteButton = folderDiv.createEl('button', { text: 'Remove' });
+            deleteButton.addEventListener('click', async () => {
+                this.plugin.settings.itemFolderPaths.splice(index, 1);
+                await this.plugin.saveSettings();
+                this.display(); // Refresh settings panel
+            });
         });
-    });
-     // Add new folder option
-    const newFolderDiv = containerEl.createEl('div', { cls: 'rpg-inventory-new-folder' });
-    
-    const newFolderInput = newFolderDiv.createEl('input', {
-        type: 'text',
-        placeholder: 'New folder path (e.g., Potions/)'
-    });
-    
-    const addButton = newFolderDiv.createEl('button', { text: 'Add Folder' });
-    addButton.addEventListener('click', async () => {
-        const newPath = newFolderInput.value.trim();
-        if (newPath) {
-            this.plugin.settings.itemFolderPaths.push(newPath);
-            await this.plugin.saveSettings();
-            newFolderInput.value = '';
-            this.display(); // Refresh settings panel
-        }
-    });
-    const newFolderDiv = containerEl.createEl('div', { cls: 'rpg-inventory-new-folder' });
-    
-    const newFolderInput = newFolderDiv.createEl('input', {
-        type: 'text',
-        placeholder: 'New folder path (e.g., Potions/)'
-    });
-    
-    const addButton = newFolderDiv.createEl('button', { text: 'Add Folder' });
-    addButton.addEventListener('click', async () => {
-        const newPath = newFolderInput.value.trim();
-        if (newPath) {
-            this.plugin.settings.itemFolderPaths.push(newPath);
-            await this.plugin.saveSettings();
-            newFolderInput.value = '';
-            this.display(); // Refresh settings panel
-        }
-    });
+        
+        // Add new folder option
+        const newFolderDiv = containerEl.createEl('div', { cls: 'rpg-inventory-new-folder' });
+        
+        const newFolderInput = newFolderDiv.createEl('input', {
+            type: 'text',
+            placeholder: 'New folder path (e.g., Potions/)'
+        });
+        
+        const addButton = newFolderDiv.createEl('button', { text: 'Add Folder' });
+        addButton.addEventListener('click', async () => {
+            const newPath = newFolderInput.value.trim();
+            if (newPath) {
+                this.plugin.settings.itemFolderPaths.push(newPath);
+                await this.plugin.saveSettings();
+                newFolderInput.value = '';
+                this.display(); // Refresh settings panel
+            }
+        });
 
         new Setting(containerEl)
             .setName('Items Folder Path')
@@ -414,7 +399,6 @@ class RPGInventorySettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     new Notice('Inventory cleared!');
                 }));
-        
     }
 }
 
