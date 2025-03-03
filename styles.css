@@ -84,3 +84,27 @@ button.mod-cta {
 button.mod-cta:hover {
     background-color: var(--interactive-accent-hover);
 }
+.rpg-inventory-folder-list {
+    margin-bottom: 15px;
+}
+
+.rpg-inventory-folder-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    margin-bottom: 5px;
+    background-color: var(--background-secondary);
+    border-radius: 4px;
+}
+
+.rpg-inventory-new-folder {
+    display: flex;
+    margin-bottom: 20px;
+}
+
+.rpg-inventory-new-folder input {
+    flex-grow: 1;
+    margin-right: 10px;
+    padding: 5px;
+}
