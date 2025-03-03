@@ -25,13 +25,13 @@ class RPGInventoryPlugin extends Plugin {
             id: 'open-shop',
             name: 'Open Shop',
             callback: () => {
-                new ShopModal(this.app, this).open();
+                new ShopSelectionModal(this.app, this).open();
             }
         });
 
-        // Add ribbon icon
-        this.addRibbonIcon('backpack', 'RPG Inventory', () => {
-            new InventoryModal(this.app, this).open();
+        // Add ribbon icon to open shop selection
+        this.addRibbonIcon('backpack', 'RPG System', () => {
+            new ShopSelectionModal(this.app, this).open();
         });
 
         // Register view for inventory
@@ -191,42 +191,52 @@ class InventoryModal extends Modal {
 }
 
 class ShopModal extends Modal {
-    constructor(app, plugin) {
+    constructor(app, plugin, shop) {
         super(app);
         this.plugin = plugin;
+        this.shop = shop; // The specific shop data
     }
 
     async onOpen() {
         const { contentEl } = this;
         contentEl.empty();
         
-        contentEl.createEl('h2', { text: 'Shop' });
+        contentEl.createEl('h2', { text: this.shop.name });
+        contentEl.createEl('p', { text: this.shop.description, cls: 'shop-description' });
         
         // Display coins
         const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
         coinDisplay.createEl('h3', { text: `Your Coins: ${this.plugin.settings.coins}` });
         
-        // Get items from notes with the #item tag or from the Items folder
+        // Get items specific to this shop's folder path
         const itemNotes = [];
+        const shopFolderPath = this.shop.folderPath;
         
-        // Get files with #item tag
+        // Get files with #item tag that are in this shop's category
         const itemFiles = this.app.vault.getMarkdownFiles().filter(file => {
-            // Check if file has #item tag
+            // Check if file has relevant tags and its path matches the shop folder
             const cache = this.app.metadataCache.getFileCache(file);
-            return cache && cache.tags && cache.tags.some(tag => tag.tag === '#item');
+            const hasItemTag = cache && cache.tags && cache.tags.some(tag => tag.tag === '#item');
+            return hasItemTag && file.path.startsWith(shopFolderPath);
         });
         
-        // Add files from multiple item folders
-        for (const folderPath of this.plugin.settings.itemFolderPaths) {
-            const itemsFolder = this.app.vault.getAbstractFileByPath(folderPath);
-            if (itemsFolder && itemsFolder.children) {
-                itemsFolder.children.forEach(file => {
-                    if (file.extension === 'md' && !itemFiles.includes(file)) {
-                        itemFiles.push(file);
-                    }
-                });
-            }
+        // Add files from the shop's folder
+        const shopFolder = this.app.vault.getAbstractFileByPath(shopFolderPath);
+        if (shopFolder && shopFolder.children) {
+            shopFolder.children.forEach(file => {
+                if (file.extension === 'md' && !itemFiles.some(f => f.path === file.path)) {
+                    itemFiles.push(file);
+                }
+            });
         }
+        
+        // Initialize stock for new items if needed
+        itemFiles.forEach(file => {
+            if (this.plugin.settings.shopStock[file.path] === undefined) {
+                // Random stock between 1-10 for new items
+                this.plugin.settings.shopStock[file.path] = Math.floor(Math.random() * 10) + 1;
+            }
+        });
         
         // Get file metadata and create shop items
         for (const file of itemFiles) {
@@ -239,7 +249,8 @@ class ShopModal extends Modal {
                 price: (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
                        Math.floor(Math.random() * 90) + 10,
                 description: (metadata && metadata.frontmatter && metadata.frontmatter.description) || 
-                            "No description available."
+                            "No description available.",
+                stock: this.plugin.settings.shopStock[file.path] || 0
             };
             
             itemNotes.push(item);
@@ -249,12 +260,13 @@ class ShopModal extends Modal {
         const shopContainer = contentEl.createEl('div', { cls: 'shop-container' });
         
         if (itemNotes.length === 0) {
-            shopContainer.createEl('p', { text: 'No items available. Add notes with the #item tag or in the Items folder.' });
+            shopContainer.createEl('p', { text: `No items available in ${this.shop.name}.` });
         } else {
             const table = shopContainer.createEl('table');
             const headerRow = table.createEl('tr');
             headerRow.createEl('th', { text: 'Item' });
             headerRow.createEl('th', { text: 'Price' });
+            headerRow.createEl('th', { text: 'Stock' });
             headerRow.createEl('th', { text: 'Description' });
             headerRow.createEl('th', { text: 'Action' });
             
@@ -269,15 +281,28 @@ class ShopModal extends Modal {
                 });
                 
                 row.createEl('td', { text: item.price.toString() });
+                row.createEl('td', { text: item.stock.toString() });
                 row.createEl('td', { text: item.description });
                 
                 const actionCell = row.createEl('td');
                 const buyButton = actionCell.createEl('button', { text: 'Buy' });
                 
+                // Disable buy button if out of stock
+                if (item.stock <= 0) {
+                    buyButton.disabled = true;
+                    buyButton.addClass('button-disabled');
+                }
+                
                 buyButton.addEventListener('click', async () => {
                     // Check if player has enough coins
                     if (this.plugin.settings.coins < item.price) {
                         new Notice("Not enough coins!");
+                        return;
+                    }
+                    
+                    // Check if item is in stock
+                    if (this.plugin.settings.shopStock[item.file.path] <= 0) {
+                        new Notice("Item out of stock!");
                         return;
                     }
                     
@@ -297,6 +322,10 @@ class ShopModal extends Modal {
                     
                     // Deduct coins
                     this.plugin.settings.coins -= item.price;
+                    
+                    // Reduce stock
+                    this.plugin.settings.shopStock[item.file.path] -= 1;
+                    
                     await this.plugin.saveSettings();
                     
                     new Notice(`Purchased ${item.name}!`);
@@ -305,8 +334,18 @@ class ShopModal extends Modal {
             });
         }
         
-        // Add inventory button
-        const inventoryButton = contentEl.createEl('button', { text: 'Open Inventory', cls: 'mod-cta' });
+        // Navigation buttons
+        const buttonContainer = contentEl.createEl('div', { cls: 'shop-buttons' });
+        
+        // Back to shop selection
+        const backButton = buttonContainer.createEl('button', { text: 'Back to Shops' });
+        backButton.addEventListener('click', () => {
+            this.close();
+            new ShopSelectionModal(this.app, this.plugin).open();
+        });
+        
+        // Open inventory
+        const inventoryButton = buttonContainer.createEl('button', { text: 'Open Inventory', cls: 'mod-cta' });
         inventoryButton.addEventListener('click', () => {
             this.close();
             new InventoryModal(this.app, this.plugin).open();
@@ -331,6 +370,9 @@ class RPGInventorySettingTab extends PluginSettingTab {
 
         containerEl.createEl('h2', { text: 'RPG Inventory Settings' });
         containerEl.createEl('h3', { text: 'Item Folders' });
+
+        // Shop management section
+        containerEl.createEl('h3', { text: 'Shop Management' });
         
         // Display current folders with delete buttons
         const folderList = containerEl.createEl('div', { cls: 'rpg-inventory-folder-list' });
@@ -362,6 +404,63 @@ class RPGInventorySettingTab extends PluginSettingTab {
                 this.plugin.settings.itemFolderPaths.push(newPath);
                 await this.plugin.saveSettings();
                 newFolderInput.value = '';
+                this.display(); // Refresh settings panel
+            }
+        });
+
+        // List existing shops
+        const shopList = containerEl.createEl('div', { cls: 'rpg-inventory-shop-list' });
+
+        this.plugin.settings.shops.forEach((shop, index) => {
+            const shopDiv = shopList.createEl('div', { cls: 'rpg-inventory-shop-item' });
+            
+            const shopInfo = shopDiv.createEl('div', { cls: 'rpg-inventory-shop-info' });
+            shopInfo.createEl('span', { text: shop.name, cls: 'shop-name' });
+            shopInfo.createEl('span', { text: shop.folderPath, cls: 'shop-path' });
+            
+            const deleteButton = shopDiv.createEl('button', { text: 'Remove' });
+            deleteButton.addEventListener('click', async () => {
+                this.plugin.settings.shops.splice(index, 1);
+                await this.plugin.saveSettings();
+                this.display(); // Refresh settings panel
+            });
+        });
+
+        // Add new shop
+        const newShopDiv = containerEl.createEl('div', { cls: 'rpg-inventory-new-shop' });
+
+        const nameInput = newShopDiv.createEl('input', {
+            type: 'text',
+            placeholder: 'Shop Name'
+        });
+        
+        const pathInput = newShopDiv.createEl('input', {
+            type: 'text',
+            placeholder: 'Folder Path (e.g., Gems/)'
+        });
+        
+        const descInput = newShopDiv.createEl('input', {
+            type: 'text',
+            placeholder: 'Shop Description'
+        });
+        
+        const addShopButton = newShopDiv.createEl('button', { text: 'Add Shop' });
+        addShopButton.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            const path = pathInput.value.trim();
+            const desc = descInput.value.trim();
+            
+            if (name && path) {
+                this.plugin.settings.shops.push({
+                    name: name,
+                    folderPath: path,
+                    description: desc || `Shop for ${name} items`
+                });
+                
+                await this.plugin.saveSettings();
+                nameInput.value = '';
+                pathInput.value = '';
+                descInput.value = '';
                 this.display(); // Refresh settings panel
             }
         });
@@ -399,6 +498,29 @@ class RPGInventorySettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                     new Notice('Inventory cleared!');
                 }));
+                
+        // Stock refresh button
+        new Setting(containerEl)
+        .setName('Refresh Shop Stock')
+        .setDesc('Randomly restock all shop items')
+        .addButton(button => button
+            .setButtonText('Restock Shops')
+            .onClick(async () => {
+                // Get all item files
+                const itemFiles = this.app.vault.getMarkdownFiles().filter(file => {
+                    // Check if file is in any shop folder
+                    return this.plugin.settings.shops.some(shop => 
+                        file.path.startsWith(shop.folderPath));
+                });
+                
+                // Restock each item (1-10 quantity)
+                itemFiles.forEach(file => {
+                    this.plugin.settings.shopStock[file.path] = Math.floor(Math.random() * 10) + 1;
+                });
+                
+                await this.plugin.saveSettings();
+                new Notice('Shops have been restocked!');
+            }));
     }
 }
 
@@ -427,5 +549,49 @@ const DEFAULT_SETTINGS = {
     shopStock: {} // Will store item path -> stock count
 };
 
+class ShopSelectionModal extends Modal {
+    constructor(app, plugin) {
+        super(app);
+        this.plugin = plugin;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        
+        contentEl.createEl('h2', { text: 'Available Shops' });
+        
+        // Display coins
+        const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
+        coinDisplay.createEl('h3', { text: `Your Coins: ${this.plugin.settings.coins}` });
+        
+        // Create shop list
+        const shopList = contentEl.createEl('div', { cls: 'shop-selection-list' });
+        
+        this.plugin.settings.shops.forEach(shop => {
+            const shopCard = shopList.createEl('div', { cls: 'shop-card' });
+            shopCard.createEl('h3', { text: shop.name });
+            shopCard.createEl('p', { text: shop.description });
+            
+            const enterButton = shopCard.createEl('button', { text: 'Enter Shop', cls: 'mod-cta' });
+            enterButton.addEventListener('click', () => {
+                this.close();
+                new ShopModal(this.app, this.plugin, shop).open();
+            });
+        });
+        
+        // Add inventory button
+        const inventoryButton = contentEl.createEl('button', { text: 'Open Inventory', cls: 'inventory-button' });
+        inventoryButton.addEventListener('click', () => {
+            this.close();
+            new InventoryModal(this.app, this.plugin).open();
+        });
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
 module.exports = RPGInventoryPlugin;
-saved
