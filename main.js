@@ -182,7 +182,7 @@ class InventoryModal extends Modal {
                 new Notice("You found nothing this time. Try again!");
             }
         });
-        
+
         // Add return to shop selection button
         const returnButton = contentEl.createEl('button', { text: 'Return to Shop Selection' });
         returnButton.addEventListener('click', () => {
@@ -202,6 +202,16 @@ class ShopModal extends Modal {
         super(app);
         this.plugin = plugin;
         this.shop = shop; // The specific shop data
+    }
+    
+    async parseItemContent(content) {
+        const priceMatch = content.match(/\((\d+)\s+#price\)/);
+        const descMatch = content.match(/\(([^)]+)\s+#description\)/);
+        
+        return {
+            price: priceMatch ? parseInt(priceMatch[1]) : null,
+            description: descMatch ? descMatch[1] : null
+        };
     }
 
     async onOpen() {
@@ -250,13 +260,19 @@ class ShopModal extends Modal {
             const metadata = this.app.metadataCache.getFileCache(file);
             const content = await this.app.vault.read(file);
             
+            // Extract price and description from content
+            const parsedContent = await this.parseItemContent(content);
+    
             const item = {
                 name: file.basename,
                 file: file,
+                // Check frontmatter first, then parsed content, then random price
                 price: (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
+                       parsedContent.price ||
                        Math.floor(Math.random() * 90) + 10,
                 description: (metadata && metadata.frontmatter && metadata.frontmatter.description) || 
-                            "No description available.",
+                             parsedContent.description ||
+                             "No description available.",
                 stock: this.plugin.settings.shopStock[file.path] || 0
             };
             
