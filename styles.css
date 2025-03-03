@@ -108,3 +108,97 @@ button.mod-cta:hover {
     margin-right: 10px;
     padding: 5px;
 }
+/* Shop selection styling */
+.shop-selection-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.shop-card {
+    background-color: var(--background-secondary);
+    border-radius: 5px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.shop-card h3 {
+    margin-top: 0;
+    color: var(--text-accent);
+}
+
+.shop-card p {
+    flex-grow: 1;
+    margin-bottom: 15px;
+}
+
+.shop-description {
+    font-style: italic;
+    margin-bottom: 15px;
+    color: var(--text-muted);
+}
+
+.shop-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.inventory-button {
+    margin-top: 15px;
+    width: 100%;
+}
+
+.button-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Shop management styling */
+.rpg-inventory-shop-list {
+    margin-bottom: 15px;
+}
+
+.rpg-inventory-shop-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: var(--background-secondary);
+    border-radius: 4px;
+}
+
+.rpg-inventory-shop-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.shop-name {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.shop-path {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.rpg-inventory-new-shop {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.rpg-inventory-new-shop input {
+    padding: 6px;
+}
+
+.rpg-inventory-new-shop button {
+    grid-column: span 2;
+    margin-top: 8px;
+}
