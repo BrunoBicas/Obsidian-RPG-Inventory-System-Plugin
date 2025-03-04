@@ -8,6 +8,9 @@ class RPGInventoryPlugin extends Plugin {
 
         // Load settings
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    
+        // Check for auto-restock
+        await this.checkAndAutoRestock();
 
         // Register plugin settings tab
         this.addSettingTab(new RPGInventorySettingTab(this.app, this));
@@ -77,6 +80,84 @@ class RPGInventoryPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+    async checkAndAutoRestock() {
+        const currentTime = Date.now();
+        const daysSinceRestock = Math.floor((currentTime - this.settings.lastRestockDate) / (1000 * 60 * 60 * 24));
+        
+        if (daysSinceRestock >= this.settings.restockDays) {
+            await this.restockShops();
+            new Notice(`Shops automatically restocked after ${daysSinceRestock} days!`);
+        }
+    }
+    async restockShops() {
+        // Get all item files
+        const itemFiles = this.app.vault.getMarkdownFiles().filter(file => {
+            // Check if file is in any shop folder
+            return this.settings.shops.some(shop => 
+                file.path.startsWith(shop.folderPath));
+        });
+        
+        // For each item, get its base price from metadata or content
+        for (const file of itemFiles) {
+            // Restock quantity (1-10)
+            this.settings.shopStock[file.path] = Math.floor(Math.random() * 10) + 1;
+            
+            // Apply price variation if item exists in inventory or has a known base price
+            if (this.settings.itemBasePrice === undefined) {
+                this.settings.itemBasePrice = {};
+            }
+            
+            // Try to get existing base price or determine from file
+            if (!this.settings.itemBasePrice[file.path]) {
+                // Get the base price from metadata if possible
+                try {
+                    const metadata = this.app.metadataCache.getFileCache(file);
+                    const content = await this.app.vault.read(file);
+                    
+                    // Check for price in frontmatter
+                    let basePrice = metadata?.frontmatter?.price;
+                    
+                    // If not in frontmatter, check for inline price tag
+                    if (!basePrice) {
+                        const priceMatch = content.match(/\((\d+)\s+#price\)/);
+                        if (priceMatch) {
+                            basePrice = parseInt(priceMatch[1]);
+                        }
+                    }
+                    
+                    // If still no price, generate a random base price
+                    if (!basePrice) {
+                        basePrice = Math.floor(Math.random() * 90) + 10;
+                    }
+                    
+                    this.settings.itemBasePrice[file.path] = basePrice;
+                } catch (error) {
+                    console.error("Error getting base price:", error);
+                    this.settings.itemBasePrice[file.path] = Math.floor(Math.random() * 90) + 10;
+                }
+            }
+        
+            // Now apply price variation
+            const basePrice = this.settings.itemBasePrice[file.path];
+            const variation = this.settings.priceVariation; // 0.3 = 30%
+            
+            // Random variation between -30% to +30%
+            const variationFactor = 1 + (Math.random() * variation * 2 - variation);
+            
+            // Store the current price
+            if (this.settings.itemCurrentPrice === undefined) {
+                this.settings.itemCurrentPrice = {};
+            }
+            
+            // Calculate new price and round to integer
+            this.settings.itemCurrentPrice[file.path] = Math.round(basePrice * variationFactor);
+        }
+        
+        // Update last restock date
+        this.settings.lastRestockDate = Date.now();
+        
+        await this.saveSettings();
     }
 }
 
@@ -267,11 +348,12 @@ class ShopModal extends Modal {
                 name: file.basename,
                 file: file,
                 // Check frontmatter first, then parsed content, then random price
-                price: (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
-                       parsedContent.price ||
+                price: this.plugin.settings.itemCurrentPrice?.[file.path] ||
+                       (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
+                       parsedContent?.price ||
                        Math.floor(Math.random() * 90) + 10,
                 description: (metadata && metadata.frontmatter && metadata.frontmatter.description) || 
-                             parsedContent.description ||
+                             parsedContent?.description ||
                              "No description available.",
                 stock: this.plugin.settings.shopStock[file.path] || 0
             };
@@ -529,21 +611,48 @@ class RPGInventorySettingTab extends PluginSettingTab {
         .addButton(button => button
             .setButtonText('Restock Shops')
             .onClick(async () => {
-                // Get all item files
-                const itemFiles = this.app.vault.getMarkdownFiles().filter(file => {
-                    // Check if file is in any shop folder
-                    return this.plugin.settings.shops.some(shop => 
-                        file.path.startsWith(shop.folderPath));
-                });
-                
-                // Restock each item (1-10 quantity)
-                itemFiles.forEach(file => {
-                    this.plugin.settings.shopStock[file.path] = Math.floor(Math.random() * 10) + 1;
-                });
-                
-                await this.plugin.saveSettings();
-                new Notice('Shops have been restocked!');
+                await this.plugin.restockShops();
+                new Notice('Shops have been restocked with price variation!');
             }));
+
+        new Setting(containerEl)
+            .setName('Auto-Restock Days')
+            .setDesc('Number of days between automatic shop restocks')
+            .addSlider(slider => slider
+                .setLimits(1, 14, 1)
+                .setValue(this.plugin.settings.restockDays)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.restockDays = value;
+                    await this.plugin.saveSettings();
+                }))
+            .addExtraButton(button => button
+                .setIcon('reset')
+                .setTooltip('Reset to 3 days')
+                .onClick(async () => {
+                    this.plugin.settings.restockDays = 3;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+        new Setting(containerEl)
+                .setName('Price Variation')
+                .setDesc('Price variation percentage during restocks (0.3 = ±30%)')
+                .addSlider(slider => slider
+                    .setLimits(0, 1, 0.05)
+                    .setValue(this.plugin.settings.priceVariation)
+                    .setDynamicTooltip()
+                    .onChange(async (value) => {
+                        this.plugin.settings.priceVariation = value;
+                        await this.plugin.saveSettings();
+                    }))
+                .addExtraButton(button => button
+                    .setIcon('reset')
+                    .setTooltip('Reset to 30%')
+                    .onClick(async () => {
+                        this.plugin.settings.priceVariation = 0.3;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }));       
     }
 }
 
@@ -569,7 +678,10 @@ const DEFAULT_SETTINGS = {
             description: "Magical potions and herbs"
         }
     ],
-    shopStock: {} // Will store item path -> stock count
+    shopStock: {}, // Will store item path -> stock count
+    lastRestockDate: Date.now(),
+    restockDays: 3, // Restock every 3 days by default
+    priceVariation: 0.3 // 30% price variation
 };
 
 class ShopSelectionModal extends Modal {
