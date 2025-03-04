@@ -72,6 +72,135 @@ class RPGInventoryPlugin extends Plugin {
                 new ShopModal(this.app, this).open();
             });
         });
+
+        //rpg treasury loot
+        this.registerMarkdownCodeBlockProcessor('rpg-loot', (source, el, ctx) => {
+            // Parse the source to get options
+            const lines = source.trim().split('\n');
+            let lootPath = '';
+            let buttonText = 'Find Loot!';
+            let minItems = 1;
+            let maxItems = 3;
+            let chancePercent = 70; // 70% chance to find items by default
+        
+            // Parse options from the codeblock
+            lines.forEach(line => {
+                if (line.startsWith('path:')) {
+                    lootPath = line.substring(5).trim();
+                } else if (line.startsWith('text:')) {
+                    buttonText = line.substring(5).trim();
+                } else if (line.startsWith('min:')) {
+                    minItems = parseInt(line.substring(4).trim()) || 1;
+                } else if (line.startsWith('max:')) {
+                    maxItems = parseInt(line.substring(4).trim()) || 3;
+                } else if (line.startsWith('chance:')) {
+                    chancePercent = parseInt(line.substring(7).trim()) || 70;
+                }
+            });
+        
+            // Create a title for the loot section
+            el.createEl('h3', { text: 'Loot Opportunity' });
+        
+            // Create the loot button
+            const lootButton = el.createEl('button', { 
+                text: buttonText,
+                cls: 'rpg-loot-button mod-cta'
+            });
+        
+            // Add event listener to the loot button
+            lootButton.addEventListener('click', async () => {
+                // First, check if there's a chance of finding nothing
+                const rollChance = Math.random() * 100;
+                if (rollChance > chancePercent) {
+                    new Notice("You found nothing this time!");
+                    return;
+                }
+        
+                // Get all potential loot items from the specified folder
+                const lootFiles = this.app.vault.getMarkdownFiles().filter(file => {
+                    // If no specific path is given, use any folder with items
+                    if (!lootPath) {
+                        return this.settings.itemFolderPaths.some(path => 
+                            file.path.startsWith(path));
+                    }
+                    // Otherwise use the specified path
+                    return file.path.startsWith(lootPath);
+                });
+        
+                if (lootFiles.length === 0) {
+                    new Notice(`No loot items found in ${lootPath || 'any item folders'}!`);
+                    return;
+                }
+        
+                // Determine how many items to give
+                const numItems = Math.floor(Math.random() * (maxItems - minItems + 1)) + minItems;
+                
+                // Select random items (may include duplicates)
+                const foundItems = [];
+                for (let i = 0; i < numItems; i++) {
+                    const randomIndex = Math.floor(Math.random() * lootFiles.length);
+                    const lootFile = lootFiles[randomIndex];
+                    
+                    try {
+                        // Get file metadata for item properties
+                        const metadata = this.app.metadataCache.getFileCache(lootFile);
+                        const content = await this.app.vault.read(lootFile);
+                        
+                        // Try to parse properties from file
+                        const priceMatch = content.match(/\((\d+)\s+#price\)/);
+                        const descMatch = content.match(/\(([^)]+)\s+#description\)/);
+                        const consumableMatch = content.match(/(\d+)\/(\d+)\s+#consumable/);
+                        const isConsumable = content.includes("#consumable");
+                        
+                        // Create the item object
+                        const item = {
+                            name: lootFile.basename,
+                            file: lootFile.path,
+                            quantity: 1,
+                            price: (metadata?.frontmatter?.price) || 
+                                   (priceMatch ? parseInt(priceMatch[1]) : Math.floor(Math.random() * 50) + 5),
+                            description: (metadata?.frontmatter?.description) || 
+                                        (descMatch ? descMatch[1] : "Looted item"),
+                            isConsumable: isConsumable,
+                            currentUses: consumableMatch ? parseInt(consumableMatch[1]) : 1,
+                            maxUses: consumableMatch ? parseInt(consumableMatch[2]) : 1
+                        };
+                        
+                        foundItems.push(item);
+                    } catch (error) {
+                        console.error("Error parsing loot item:", error);
+                    }
+                }
+                
+                // Add items to inventory
+                if (foundItems.length > 0) {
+                    foundItems.forEach(newItem => {
+                        // Check if item already exists in inventory
+                        const existingItem = this.settings.inventory.find(i => i.name === newItem.name);
+                        if (existingItem) {
+                            existingItem.quantity += 1;
+                        } else {
+                            this.settings.inventory.push(newItem);
+                        }
+                    });
+                    
+                    // Save settings
+                    await this.saveSettings();
+                    
+                    // Create notification message
+                    const itemNames = foundItems.map(item => item.name).join(", ");
+                    new Notice(`You found: ${itemNames}!`);
+                } else {
+                    new Notice("You found nothing valuable.");
+                }
+            });
+        
+            // Add a small description
+            el.createEl('p', { 
+                text: `Chance to find ${minItems}-${maxItems} random items from ${lootPath || 'any item folder'}.`,
+                cls: 'rpg-loot-description'
+            });
+        });
     }
 
     onunload() {
