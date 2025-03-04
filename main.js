@@ -341,12 +341,23 @@ class InventoryModal extends Modal {
                 const row = table.createEl('tr');
                 
                 // For consumable items, show remaining uses
+                const nameCell = row.createEl('td');
                 if (item.isConsumable) {
-                    row.createEl('td', { 
+                    const itemLink = nameCell.createEl('a', { 
                         text: `${item.name} (${item.currentUses}/${item.maxUses} uses)` 
                     });
+                    itemLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        const file = this.app.vault.getAbstractFileByPath(item.file);
+                        if (file) this.app.workspace.getLeaf().openFile(file);
+                    });
                 } else {
-                    row.createEl('td', { text: item.name });
+                    const itemLink = nameCell.createEl('a', { text: item.name });
+                    itemLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        const file = this.app.vault.getAbstractFileByPath(item.file);
+                        if (file) this.app.workspace.getLeaf().openFile(file);
+                    });
                 }
                 
                 row.createEl('td', { text: item.quantity.toString() });
