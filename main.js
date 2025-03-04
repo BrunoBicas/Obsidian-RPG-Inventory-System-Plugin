@@ -388,6 +388,7 @@ class ShopModal extends Modal {
             
             // Extract price and description from content
             const parsedContent = await this.parseItemContent(content);
+            const parsedTags = await this.parseItemTags(content);
     
             const item = {
                 name: file.basename,
@@ -469,7 +470,10 @@ class ShopModal extends Modal {
                             file: item.file.path,
                             quantity: 1,
                             price: item.price,
-                            description: item.description
+                            description: item.description,
+                            isConsumable: item.isConsumable,
+                            currentUses: item.currentUses,
+                            maxUses: item.maxUses
                         });
                     }
                     
