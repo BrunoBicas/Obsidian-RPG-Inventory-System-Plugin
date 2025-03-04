@@ -210,13 +210,46 @@ class InventoryModal extends Modal {
             
             this.plugin.settings.inventory.forEach(item => {
                 const row = table.createEl('tr');
-                row.createEl('td', { text: item.name });
+                
+                // For consumable items, show remaining uses
+                if (item.isConsumable) {
+                    row.createEl('td', { 
+                        text: `${item.name} (${item.currentUses}/${item.maxUses} uses)` 
+                    });
+                } else {
+                    row.createEl('td', { text: item.name });
+                }
+                
                 row.createEl('td', { text: item.quantity.toString() });
                 
                 const actionCell = row.createEl('td');
                 const useButton = actionCell.createEl('button', { text: 'Use' });
-                useButton.addEventListener('click', () => {
-                    new Notice(`Used ${item.name}!`);
+                useButton.addEventListener('click', async () => {
+                    if (item.isConsumable) {
+                        // Decrease uses for consumable items
+                        item.currentUses -= 1;
+                        
+                        // If no uses left, remove one from quantity or remove item
+                        if (item.currentUses <= 0) {
+                            if (item.quantity > 1) {
+                                item.quantity -= 1;
+                                // Reset uses for the next item
+                                item.currentUses = item.maxUses;
+                            } else {
+                                // Remove item from inventory if last one
+                                const index = this.plugin.settings.inventory.indexOf(item);
+                                this.plugin.settings.inventory.splice(index, 1);
+                            }
+                            new Notice(`Used last charge of ${item.name}!`);
+                        } else {
+                            new Notice(`Used ${item.name}! ${item.currentUses}/${item.maxUses} uses remaining.`);
+                        }
+                        
+                        await this.plugin.saveSettings();
+                        this.onOpen(); // Refresh the modal
+                    } else {
+                        new Notice(`Used ${item.name}!`);
+                    }
                 });
                 
                 const sellButton = actionCell.createEl('button', { text: 'Sell' });
@@ -295,6 +328,18 @@ class ShopModal extends Modal {
         };
     }
 
+    async parseItemTags(content) {
+        // Check for consumable tag with usage count (e.g., "3/3 #consumable")
+        const consumableMatch = content.match(/(\d+)\/(\d+)\s+#consumable/);
+        const isConsumable = content.includes("#consumable");
+        
+        return {
+            isConsumable: isConsumable,
+            currentUses: consumableMatch ? parseInt(consumableMatch[1]) : 1,
+            maxUses: consumableMatch ? parseInt(consumableMatch[2]) : 1
+        };
+    }
+
     async onOpen() {
         const { contentEl } = this;
         contentEl.empty();
@@ -349,13 +394,16 @@ class ShopModal extends Modal {
                 file: file,
                 // Check frontmatter first, then parsed content, then random price
                 price: this.plugin.settings.itemCurrentPrice?.[file.path] ||
-                       (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
-                       parsedContent?.price ||
-                       Math.floor(Math.random() * 90) + 10,
+                (metadata && metadata.frontmatter && metadata.frontmatter.price) || 
+                parsedContent?.price ||
+                Math.floor(Math.random() * 90) + 10,
                 description: (metadata && metadata.frontmatter && metadata.frontmatter.description) || 
-                             parsedContent?.description ||
-                             "No description available.",
-                stock: this.plugin.settings.shopStock[file.path] || 0
+                 parsedContent?.description ||
+                 "No description available.",
+                stock: this.plugin.settings.shopStock[file.path] || 0,
+                isConsumable: parsedTags.isConsumable,
+                currentUses: parsedTags.currentUses,
+                maxUses: parsedTags.maxUses
             };
             
             itemNotes.push(item);
@@ -681,7 +729,8 @@ const DEFAULT_SETTINGS = {
     shopStock: {}, // Will store item path -> stock count
     lastRestockDate: Date.now(),
     restockDays: 3, // Restock every 3 days by default
-    priceVariation: 0.3 // 30% price variation
+    priceVariation: 0.3, // 30% price variation
+    itemCurrentPrice: {}, // Will store item path -> current price
 };
 
 class ShopSelectionModal extends Modal {
