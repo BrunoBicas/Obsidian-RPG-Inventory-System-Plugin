@@ -704,6 +704,41 @@ class RPGInventorySettingTab extends PluginSettingTab {
                 this.display(); // Refresh settings panel
             }
         });
+        
+// Custom Shop Creation
+containerEl.createEl('h3', { text: 'Custom Shop Creator' });
+const customShopDiv = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop' });
+
+const customShopButton = customShopDiv.createEl('button', { 
+    text: 'Create Custom Shop', 
+    cls: 'mod-cta' 
+});
+customShopButton.addEventListener('click', () => {
+    new CustomShopCreatorModal(this.app, this.plugin).open();
+});
+
+// Display existing custom shops
+if (this.plugin.settings.customShops && this.plugin.settings.customShops.length > 0) {
+    const customShopList = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop-list' });
+    
+    this.plugin.settings.customShops.forEach((shop, index) => {
+        const shopDiv = customShopList.createEl('div', { cls: 'rpg-inventory-shop-item' });
+        
+        const shopInfo = shopDiv.createEl('div', { cls: 'rpg-inventory-shop-info' });
+        shopInfo.createEl('span', { text: shop.name, cls: 'shop-name' });
+        shopInfo.createEl('span', { 
+            text: `Fixed Items: ${shop.fixedItems.length}, Random Pool: ${shop.randomPool.length}`, 
+            cls: 'shop-details' 
+        });
+        
+        const deleteButton = shopDiv.createEl('button', { text: 'Remove' });
+        deleteButton.addEventListener('click', async () => {
+            this.plugin.settings.customShops.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display(); // Refresh settings panel
+        });
+    });
+}
 
         // List existing shops
         const shopList = containerEl.createEl('div', { cls: 'rpg-inventory-shop-list' });
@@ -852,6 +887,7 @@ class RPGInventorySettingTab extends PluginSettingTab {
 const DEFAULT_SETTINGS = {
     coins: 1000,
     inventory: [],
+    customShops: [], // Will store custom shop configurations
     itemFolderPaths: ['Items/', 'Weapons/', 'Armor/'], // Default folders - replace with your preferred ones
     shops: [
         {
@@ -883,39 +919,598 @@ class ShopSelectionModal extends Modal {
         this.plugin = plugin;
     }
 
-    onOpen() {
-        const { contentEl } = this;
-        contentEl.empty();
+
+onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    
+    contentEl.createEl('h2', { text: 'Available Shops' });
+    
+    // Display coins
+    const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
+    coinDisplay.createEl('h3', { text: `Your Coins: ${this.plugin.settings.coins}` });
+    
+    // Create shop list
+    const shopList = contentEl.createEl('div', { cls: 'shop-selection-list' });
+    
+    // Regular shops
+    this.plugin.settings.shops.forEach(shop => {
+        const shopCard = shopList.createEl('div', { cls: 'shop-card' });
+        shopCard.createEl('h3', { text: shop.name });
+        shopCard.createEl('p', { text: shop.description });
         
-        contentEl.createEl('h2', { text: 'Available Shops' });
+        const enterButton = shopCard.createEl('button', { text: 'Enter Shop', cls: 'mod-cta' });
+        enterButton.addEventListener('click', () => {
+            this.close();
+            new ShopModal(this.app, this.plugin, shop).open();
+        });
+    });
+    
+    // Custom shops
+    if (this.plugin.settings.customShops && this.plugin.settings.customShops.length > 0) {
+        contentEl.createEl('h2', { text: 'Custom Shops' });
+        const customShopList = contentEl.createEl('div', { cls: 'shop-selection-list' });
         
-        // Display coins
-        const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
-        coinDisplay.createEl('h3', { text: `Your Coins: ${this.plugin.settings.coins}` });
-        
-        // Create shop list
-        const shopList = contentEl.createEl('div', { cls: 'shop-selection-list' });
-        
-        this.plugin.settings.shops.forEach(shop => {
-            const shopCard = shopList.createEl('div', { cls: 'shop-card' });
+        this.plugin.settings.customShops.forEach(shop => {
+            const shopCard = customShopList.createEl('div', { cls: 'shop-card custom-shop-card' });
             shopCard.createEl('h3', { text: shop.name });
             shopCard.createEl('p', { text: shop.description });
             
             const enterButton = shopCard.createEl('button', { text: 'Enter Shop', cls: 'mod-cta' });
             enterButton.addEventListener('click', () => {
                 this.close();
-                new ShopModal(this.app, this.plugin, shop).open();
+                new CustomShopModal(this.app, this.plugin, shop).open();
             });
         });
+    }
+    
+    // Add inventory button
+    const inventoryButton = contentEl.createEl('button', { text: 'Open Inventory', cls: 'inventory-button' });
+    inventoryButton.addEventListener('click', () => {
+        this.close();
+        new InventoryModal(this.app, this.plugin).open();
+    });
+}
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+// Add this as a new class after the ShopSelectionModal class, around line 839:
+class CustomShopCreatorModal extends Modal {
+    constructor(app, plugin) {
+        super(app);
+        this.plugin = plugin;
+        this.customShop = {
+            name: '',
+            description: '',
+            shopNote: '', // The note that represents the shop
+            fixedItems: [], // Items that always appear
+            randomPool: [], // Items that might appear
+            randomChance: 0.3, // 30% chance by default for random items
+            maxRandomItems: 3 // Maximum number of random items that can appear
+        };
+        this.allItems = [];
+    }
+    
+    async loadAllItems() {
+        // Get all markdown files from item folders
+        this.allItems = [];
         
-        // Add inventory button
-        const inventoryButton = contentEl.createEl('button', { text: 'Open Inventory', cls: 'inventory-button' });
+        for (const folderPath of this.plugin.settings.itemFolderPaths) {
+            const itemFiles = this.app.vault.getMarkdownFiles().filter(file => 
+                file.path.startsWith(folderPath));
+                
+            for (const file of itemFiles) {
+                this.allItems.push({
+                    name: file.basename,
+                    path: file.path
+                });
+            }
+        }
+    }
+    
+    async onOpen() {
+        await this.loadAllItems();
+        
+        const { contentEl } = this;
+        contentEl.empty();
+        
+        contentEl.createEl('h2', { text: 'Create Custom Shop' });
+        
+        // Basic shop information
+        const basicInfoDiv = contentEl.createEl('div', { cls: 'custom-shop-basic-info' });
+        
+        // Shop name
+        const nameDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
+        nameDiv.createEl('span', { text: 'Shop Name:', cls: 'setting-item-name' });
+        const nameInput = nameDiv.createEl('input', { 
+            type: 'text',
+            value: this.customShop.name,
+            placeholder: 'Custom Shop Name'
+        });
+        nameInput.addEventListener('change', () => {
+            this.customShop.name = nameInput.value;
+        });
+        
+        // Shop description
+        const descDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
+        descDiv.createEl('span', { text: 'Description:', cls: 'setting-item-name' });
+        const descInput = descDiv.createEl('input', { 
+            type: 'text',
+            value: this.customShop.description,
+            placeholder: 'Shop description'
+        });
+        descInput.addEventListener('change', () => {
+            this.customShop.description = descInput.value;
+        });
+        
+        // Shop note selector
+        const noteDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
+        noteDiv.createEl('span', { text: 'Shop Note:', cls: 'setting-item-name' });
+        const noteButton = noteDiv.createEl('button', { text: 'Select Shop Note' });
+        const noteLabel = noteDiv.createEl('span', { 
+            text: this.customShop.shopNote || 'No note selected',
+            cls: 'shop-note-label' 
+        });
+        
+        noteButton.addEventListener('click', async () => {
+            const files = this.app.vault.getMarkdownFiles();
+            
+            // Create a file selector modal
+            const fileModal = new Modal(this.app);
+            fileModal.titleEl.setText('Select Shop Note');
+            
+            const fileList = fileModal.contentEl.createEl('div', { cls: 'file-selector-list' });
+            
+            files.forEach(file => {
+                const fileItem = fileList.createEl('div', { cls: 'file-item' });
+                fileItem.setText(file.path);
+                fileItem.addEventListener('click', () => {
+                    this.customShop.shopNote = file.path;
+                    noteLabel.setText(file.path);
+                    fileModal.close();
+                });
+            });
+            
+            fileModal.open();
+        });
+        
+        // Random item settings
+        const randomDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
+        randomDiv.createEl('span', { text: 'Random Item Chance (%):', cls: 'setting-item-name' });
+        const chanceInput = randomDiv.createEl('input', { 
+            type: 'number',
+            value: this.customShop.randomChance * 100,
+            placeholder: '30'
+        });
+        chanceInput.addEventListener('change', () => {
+            let chance = parseInt(chanceInput.value) / 100;
+            if (chance < 0) chance = 0;
+            if (chance > 1) chance = 1;
+            this.customShop.randomChance = chance;
+        });
+        
+        const maxRandomDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
+        maxRandomDiv.createEl('span', { text: 'Max Random Items:', cls: 'setting-item-name' });
+        const maxRandomInput = maxRandomDiv.createEl('input', { 
+            type: 'number',
+            value: this.customShop.maxRandomItems,
+            placeholder: '3'
+        });
+        maxRandomInput.addEventListener('change', () => {
+            let max = parseInt(maxRandomInput.value);
+            if (max < 0) max = 0;
+            this.customShop.maxRandomItems = max;
+        });
+        
+        // Item Selection
+        const itemSelectionDiv = contentEl.createEl('div', { cls: 'custom-shop-item-selection' });
+        itemSelectionDiv.createEl('h3', { text: 'Select Items for Shop' });
+        
+        // Two columns: Available Items and Selected Items
+        const columnsDiv = itemSelectionDiv.createEl('div', { cls: 'columns-container' });
+        
+        // Fixed Items Column
+        const fixedItemsDiv = columnsDiv.createEl('div', { cls: 'items-column' });
+        fixedItemsDiv.createEl('h4', { text: 'Fixed Items (Always Available)' });
+        const fixedList = fixedItemsDiv.createEl('div', { cls: 'item-list fixed-items' });
+        
+        // Show selected fixed items
+        const updateFixedList = () => {
+            fixedList.empty();
+            this.customShop.fixedItems.forEach((itemPath, index) => {
+                const itemDiv = fixedList.createEl('div', { cls: 'selected-item' });
+                
+                const itemName = itemPath.split('/').pop().replace('.md', '');
+                itemDiv.createEl('span', { text: itemName });
+                
+                const removeBtn = itemDiv.createEl('button', { text: 'Remove' });
+                removeBtn.addEventListener('click', () => {
+                    this.customShop.fixedItems.splice(index, 1);
+                    updateFixedList();
+                });
+            });
+            
+            // Add button to add fixed items
+            const addFixedBtn = fixedList.createEl('button', { 
+                text: 'Add Fixed Item', 
+                cls: 'add-item-button' 
+            });
+            addFixedBtn.addEventListener('click', () => {
+                this.showItemSelector(this.customShop.fixedItems, updateFixedList);
+            });
+        };
+        
+        updateFixedList();
+        
+        // Random Items Column
+        const randomItemsDiv = columnsDiv.createEl('div', { cls: 'items-column' });
+        randomItemsDiv.createEl('h4', { text: 'Random Items Pool' });
+        const randomList = randomItemsDiv.createEl('div', { cls: 'item-list random-items' });
+        
+        // Show selected random items
+        const updateRandomList = () => {
+            randomList.empty();
+            this.customShop.randomPool.forEach((itemPath, index) => {
+                const itemDiv = randomList.createEl('div', { cls: 'selected-item' });
+                
+                const itemName = itemPath.split('/').pop().replace('.md', '');
+                itemDiv.createEl('span', { text: itemName });
+                
+                const removeBtn = itemDiv.createEl('button', { text: 'Remove' });
+                removeBtn.addEventListener('click', () => {
+                    this.customShop.randomPool.splice(index, 1);
+                    updateRandomList();
+                });
+            });
+            
+            // Add button to add random items
+            const addRandomBtn = randomList.createEl('button', { 
+                text: 'Add to Random Pool', 
+                cls: 'add-item-button' 
+            });
+            addRandomBtn.addEventListener('click', () => {
+                this.showItemSelector(this.customShop.randomPool, updateRandomList);
+            });
+        };
+        
+        updateRandomList();
+        
+        // Save button
+        const saveButton = contentEl.createEl('button', { 
+            text: 'Save Custom Shop', 
+            cls: 'mod-cta save-custom-shop' 
+        });
+        saveButton.addEventListener('click', async () => {
+            if (!this.customShop.name) {
+                new Notice('Please enter a shop name');
+                return;
+            }
+            
+            if (!this.customShop.shopNote) {
+                new Notice('Please select a shop note');
+                return;
+            }
+            
+            // Initialize custom shops array if needed
+            if (!this.plugin.settings.customShops) {
+                this.plugin.settings.customShops = [];
+            }
+            
+            // Add the new custom shop
+            this.plugin.settings.customShops.push(this.customShop);
+            await this.plugin.saveSettings();
+            
+            new Notice(`Custom shop "${this.customShop.name}" created!`);
+            this.close();
+        });
+    }
+    
+    showItemSelector(targetArray, updateCallback) {
+        // Create a modal with all available items
+        const itemModal = new Modal(this.app);
+        itemModal.titleEl.setText('Select Items');
+        
+        const searchInput = itemModal.contentEl.createEl('input', {
+            type: 'text',
+            placeholder: 'Search items...',
+            cls: 'item-search'
+        });
+        
+        const itemList = itemModal.contentEl.createEl('div', { cls: 'all-items-list' });
+        
+        const renderItems = (searchTerm = '') => {
+            itemList.empty();
+            
+            const filteredItems = searchTerm ? 
+                this.allItems.filter(item => 
+                    item.name.toLowerCase().includes(searchTerm.toLowerCase())) : 
+                this.allItems;
+            
+            filteredItems.forEach(item => {
+                const itemDiv = itemList.createEl('div', { cls: 'item-option' });
+                itemDiv.setText(item.name);
+                
+                // Don't show already selected items
+                if (targetArray.includes(item.path)) {
+                    itemDiv.addClass('item-already-selected');
+                    return;
+                }
+                
+                itemDiv.addEventListener('click', () => {
+                    targetArray.push(item.path);
+                    updateCallback();
+                    itemModal.close();
+                });
+            });
+        };
+        
+        // Initial render
+        renderItems();
+        
+        // Search functionality
+        searchInput.addEventListener('input', () => {
+            renderItems(searchInput.value);
+        });
+        
+        itemModal.open();
+    }
+    
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+// Add this after the CustomShopCreatorModal class:
+class CustomShopModal extends Modal {
+    constructor(app, plugin, customShop) {
+        super(app);
+        this.plugin = plugin;
+        this.customShop = customShop;
+        this.shopItems = [];
+    }
+    
+    async prepareShopItems() {
+        // Start with fixed items
+        this.shopItems = [];
+        
+        // Add all fixed items
+        for (const itemPath of this.customShop.fixedItems) {
+            const file = this.app.vault.getAbstractFileByPath(itemPath);
+            if (file) {
+                try {
+                    const metadata = this.app.metadataCache.getFileCache(file);
+                    const content = await this.app.vault.read(file);
+                    
+                    // Extract price, description, and consumable status
+                    const priceMatch = content.match(/\((\d+)\s+#price\)/);
+                    const descMatch = content.match(/\(([^)]+)\s+#description\)/);
+                    const consumableMatch = content.match(/(\d+)\/(\d+)\s+#consumable/);
+                    const isConsumable = content.includes("#consumable");
+                    
+                    // Create the item
+                    this.shopItems.push({
+                        name: file.basename,
+                        file: file,
+                        price: this.plugin.settings.itemCurrentPrice?.[itemPath] ||
+                               (metadata?.frontmatter?.price) || 
+                               (priceMatch ? parseInt(priceMatch[1]) : Math.floor(Math.random() * 90) + 10),
+                        description: (metadata?.frontmatter?.description) || 
+                                    (descMatch ? descMatch[1] : "No description available."),
+                        stock: this.plugin.settings.shopStock[itemPath] || 
+                               Math.floor(Math.random() * 5) + 1, // 1-5 stock for fixed items
+                        isConsumable: isConsumable,
+                        currentUses: consumableMatch ? parseInt(consumableMatch[1]) : 1,
+                        maxUses: consumableMatch ? parseInt(consumableMatch[2]) : 1
+                    });
+                } catch (error) {
+                    console.error("Error loading fixed item:", error);
+                }
+            }
+        }
+        
+        // Add random items based on chance
+        if (this.customShop.randomPool.length > 0) {
+            // Shuffle the random pool
+            const shuffledPool = [...this.customShop.randomPool].sort(() => Math.random() - 0.5);
+            
+            // Determine how many random items to show (up to max)
+            const maxToShow = Math.min(
+                this.customShop.maxRandomItems, 
+                this.customShop.randomPool.length
+            );
+            
+            // For each potential random item
+            for (let i = 0; i < maxToShow; i++) {
+                // Check if this item should appear based on randomChance
+                if (Math.random() <= this.customShop.randomChance) {
+                    const itemPath = shuffledPool[i];
+                    const file = this.app.vault.getAbstractFileByPath(itemPath);
+                    
+                    if (file) {
+                        try {
+                            const metadata = this.app.metadataCache.getFileCache(file);
+                            const content = await this.app.vault.read(file);
+                            
+                            // Extract price, description, and consumable status
+                            const priceMatch = content.match(/\((\d+)\s+#price\)/);
+                            const descMatch = content.match(/\(([^)]+)\s+#description\)/);
+                            const consumableMatch = content.match(/(\d+)\/(\d+)\s+#consumable/);
+                            const isConsumable = content.includes("#consumable");
+                            
+                            // Create the item with limited stock for random items
+                            this.shopItems.push({
+                                name: file.basename,
+                                file: file,
+                                price: this.plugin.settings.itemCurrentPrice?.[itemPath] ||
+                                       (metadata?.frontmatter?.price) || 
+                                       (priceMatch ? parseInt(priceMatch[1]) : Math.floor(Math.random() * 90) + 10),
+                                description: (metadata?.frontmatter?.description) || 
+                                            (descMatch ? descMatch[1] : "Rare find!"),
+                                stock: this.plugin.settings.shopStock[itemPath] || 
+                                       Math.floor(Math.random() * 3) + 1, // 1-3 stock for random items
+                                isConsumable: isConsumable,
+                                currentUses: consumableMatch ? parseInt(consumableMatch[1]) : 1,
+                                maxUses: consumableMatch ? parseInt(consumableMatch[2]) : 1,
+                                isRare: true // Mark as a rare/random item
+                            });
+                        } catch (error) {
+                            console.error("Error loading random item:", error);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    async onOpen() {
+        await this.prepareShopItems();
+        
+        const { contentEl } = this;
+        contentEl.empty();
+        
+        // Get shop note content if possible
+        let shopNoteContent = "";
+        try {
+            const shopNoteFile = this.app.vault.getAbstractFileByPath(this.customShop.shopNote);
+            if (shopNoteFile) {
+                shopNoteContent = await this.app.vault.read(shopNoteFile);
+                
+                // Create a div for the shop note with markdown rendering
+                const shopNoteDiv = contentEl.createEl('div', { cls: 'shop-note-content' });
+                window.MarkdownRenderer.renderMarkdown(
+                    shopNoteContent, 
+                    shopNoteDiv, 
+                    this.customShop.shopNote,
+                    null
+                );
+            }
+        } catch (error) {
+            console.error("Error loading shop note:", error);
+        }
+        
+        contentEl.createEl('h2', { text: this.customShop.name });
+        contentEl.createEl('p', { text: this.customShop.description, cls: 'shop-description' });
+        
+        // Display coins
+        const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
+        coinDisplay.createEl('h3', { text: `Your Coins: ${this.plugin.settings.coins}` });
+        
+        // Display shop items
+        const shopContainer = contentEl.createEl('div', { cls: 'shop-container' });
+        
+        if (this.shopItems.length === 0) {
+            shopContainer.createEl('p', { text: `No items available in ${this.customShop.name}.` });
+        } else {
+            const table = shopContainer.createEl('table');
+            const headerRow = table.createEl('tr');
+            headerRow.createEl('th', { text: 'Item' });
+            headerRow.createEl('th', { text: 'Price' });
+            headerRow.createEl('th', { text: 'Stock' });
+            headerRow.createEl('th', { text: 'Description' });
+            headerRow.createEl('th', { text: 'Action' });
+            
+            this.shopItems.forEach(item => {
+                const row = table.createEl('tr');
+                if (item.isRare) {
+                    row.addClass('rare-item-row');
+                }
+                
+                const nameCell = row.createEl('td');
+                const itemLink = nameCell.createEl('a', { text: item.name });
+                itemLink.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    this.app.workspace.getLeaf().openFile(item.file);
+                });
+                
+                if (item.isRare) {
+                    nameCell.createEl('span', { text: ' ⭐', cls: 'rare-item-star' });
+                }
+                
+                row.createEl('td', { text: item.price.toString() });
+                row.createEl('td', { text: item.stock.toString() });
+                row.createEl('td', { text: item.description });
+                
+                const actionCell = row.createEl('td');
+                const buyButton = actionCell.createEl('button', { text: 'Buy' });
+                
+                // Disable buy button if out of stock
+                if (item.stock <= 0) {
+                    buyButton.disabled = true;
+                    buyButton.addClass('button-disabled');
+                }
+                
+                buyButton.addEventListener('click', async () => {
+                    // Check if player has enough coins
+                    if (this.plugin.settings.coins < item.price) {
+                        new Notice("Not enough coins!");
+                        return;
+                    }
+                    
+                    // Check if item is in stock
+                    if (item.stock <= 0) {
+                        new Notice("Item out of stock!");
+                        return;
+                    }
+                    
+                    // Add item to inventory
+                    const existingItem = this.plugin.settings.inventory.find(i => i.name === item.name);
+                    if (existingItem) {
+                        existingItem.quantity += 1;
+                    } else {
+                        this.plugin.settings.inventory.push({
+                            name: item.name,
+                            file: item.file.path,
+                            quantity: 1,
+                            price: item.price,
+                            description: item.description,
+                            isConsumable: item.isConsumable,
+                            currentUses: item.currentUses,
+                            maxUses: item.maxUses
+                        });
+                    }
+                    
+                    // Deduct coins
+                    this.plugin.settings.coins -= item.price;
+                    
+                    // Reduce stock
+                    item.stock -= 1;
+                    
+                    // Also update the global stock if needed
+                    if (this.plugin.settings.shopStock[item.file.path] !== undefined) {
+                        this.plugin.settings.shopStock[item.file.path] -= 1;
+                    } else {
+                        this.plugin.settings.shopStock[item.file.path] = item.stock;
+                    }
+                    
+                    await this.plugin.saveSettings();
+                    
+                    new Notice(`Purchased ${item.name}!`);
+                    this.onOpen(); // Refresh the modal
+                });
+            });
+        }
+        
+        // Navigation buttons
+        const buttonContainer = contentEl.createEl('div', { cls: 'shop-buttons' });
+        
+        // Back to shop selection
+        const backButton = buttonContainer.createEl('button', { text: 'Back to Shops' });
+        backButton.addEventListener('click', () => {
+            this.close();
+            new ShopSelectionModal(this.app, this.plugin).open();
+        });
+        
+        // Open inventory
+        const inventoryButton = buttonContainer.createEl('button', { text: 'Open Inventory', cls: 'mod-cta' });
         inventoryButton.addEventListener('click', () => {
             this.close();
             new InventoryModal(this.app, this.plugin).open();
         });
     }
-
+    
     onClose() {
         const { contentEl } = this;
         contentEl.empty();
