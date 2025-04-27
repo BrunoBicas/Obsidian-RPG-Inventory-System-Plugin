@@ -737,6 +737,23 @@ if (this.plugin.settings.customShops && this.plugin.settings.customShops.length 
             await this.plugin.saveSettings();
             this.display(); // Refresh settings panel
         });
+
+        const editButton = shopDiv.createEl('button', { text: 'Edit' });
+editButton.addEventListener('click', async () => {
+    const editModal = new CustomShopCreatorModal(this.app, this.plugin);
+    editModal.customShop = JSON.parse(JSON.stringify(shop)); // Copia o shop
+    editModal.open();
+    
+    // Quando salvar, substitui o antigo
+    const originalSave = editModal.saveCustomShop;
+    editModal.saveCustomShop = async () => {
+        this.plugin.settings.customShops[index] = editModal.customShop;
+        await this.plugin.saveSettings();
+        this.display(); // Atualiza a lista
+        editModal.close();
+    };
+});
+
     });
 }
 
@@ -985,14 +1002,56 @@ class CustomShopCreatorModal extends Modal {
         this.customShop = {
             name: '',
             description: '',
-            shopNote: '', // The note that represents the shop
-            fixedItems: [], // Items that always appear
-            randomPool: [], // Items that might appear
-            randomChance: 0.3, // 30% chance by default for random items
-            maxRandomItems: 3 // Maximum number of random items that can appear
+            shopNote: '',
+            fixedItems: [],
+            randomPools: []
         };
         this.allItems = [];
     }
+
+    addRandomPool(container) {
+        const pool = { chance: 0.3, maxItems: 3, items: [] };
+        this.customShop.randomPools.push(pool);
+    
+        const poolDiv = container.createEl('div', { cls: 'random-pool-block' });
+        poolDiv.style.border = "1px solid var(--background-modifier-border)";
+        poolDiv.style.padding = "10px";
+        poolDiv.style.marginBottom = "10px";
+    
+        const controlsDiv = poolDiv.createEl('div', { cls: 'pool-controls' });
+    
+        const chanceInput = controlsDiv.createEl('input', { type: 'number', value: 30, placeholder: 'Chance %' });
+        chanceInput.addEventListener('change', () => {
+            pool.chance = Math.min(Math.max(parseInt(chanceInput.value) / 100, 0), 1);
+        });
+    
+        const maxInput = controlsDiv.createEl('input', { type: 'number', value: 3, placeholder: 'Max Items' });
+        maxInput.addEventListener('change', () => {
+            pool.maxItems = Math.max(parseInt(maxInput.value), 0);
+        });
+    
+        const removePoolBtn = controlsDiv.createEl('button', { text: 'Remove Pool' });
+        removePoolBtn.addEventListener('click', () => {
+            const index = this.customShop.randomPools.indexOf(pool);
+            if (index !== -1) {
+                this.customShop.randomPools.splice(index, 1);
+                poolDiv.remove();
+            }
+        });
+    
+        const itemList = poolDiv.createEl('div', { cls: 'pool-item-list' });
+    
+        const addItemButton = poolDiv.createEl('button', { text: 'Add Item to Pool', cls: 'add-item-button' });
+        addItemButton.addEventListener('click', () => {
+            this.showItemSelector(pool.items, () => {
+                itemList.empty();
+                pool.items.forEach(path => {
+                    const itemDiv = itemList.createEl('div', { text: path.split('/').pop().replace('.md', '') });
+                });
+            });
+        });
+    }
+    
     
     async loadAllItems() {
         // Get all markdown files from item folders
@@ -1144,6 +1203,23 @@ class CustomShopCreatorModal extends Modal {
         };
         
         updateFixedList();
+
+        const randomPoolsDiv = contentEl.createEl('div', { cls: 'random-pools-container' });
+randomPoolsDiv.createEl('h3', { text: 'Random Pools' });
+
+const addPoolButton = randomPoolsDiv.createEl('button', { 
+    text: 'Add New Random Pool', 
+    cls: 'mod-cta' 
+});
+addPoolButton.addEventListener('click', () => {
+    this.addRandomPool(randomPoolsDiv);
+});
+
+// Render pools existentes
+this.customShop.randomPools.forEach(() => {
+    this.addRandomPool(randomPoolsDiv);
+});
+
         
         // Random Items Column
         const randomItemsDiv = columnsDiv.createEl('div', { cls: 'items-column' });
@@ -1189,10 +1265,7 @@ class CustomShopCreatorModal extends Modal {
                 return;
             }
             
-            if (!this.customShop.shopNote) {
-                new Notice('Please select a shop note');
-                return;
-            }
+           
             
             // Initialize custom shops array if needed
             if (!this.plugin.settings.customShops) {
@@ -1263,7 +1336,7 @@ class CustomShopCreatorModal extends Modal {
         contentEl.empty();
     }
 }
-// Add this after the CustomShopCreatorModal class:
+
 class CustomShopModal extends Modal {
     constructor(app, plugin, customShop) {
         super(app);
@@ -1311,58 +1384,39 @@ class CustomShopModal extends Modal {
             }
         }
         
-        // Add random items based on chance
-        if (this.customShop.randomPool.length > 0) {
-            // Shuffle the random pool
-            const shuffledPool = [...this.customShop.randomPool].sort(() => Math.random() - 0.5);
-            
-            // Determine how many random items to show (up to max)
-            const maxToShow = Math.min(
-                this.customShop.maxRandomItems, 
-                this.customShop.randomPool.length
-            );
-            
-            // For each potential random item
-            for (let i = 0; i < maxToShow; i++) {
-                // Check if this item should appear based on randomChance
-                if (Math.random() <= this.customShop.randomChance) {
-                    const itemPath = shuffledPool[i];
-                    const file = this.app.vault.getAbstractFileByPath(itemPath);
+        // Para cada random pool
+for (const pool of this.customShop.randomPools) {
+    const shuffled = [...pool.items].sort(() => Math.random() - 0.5);
+    const limit = Math.min(pool.maxItems, shuffled.length);
+
+    for (let i = 0; i < limit; i++) {
+        if (Math.random() <= pool.chance) {
+            const itemPath = shuffled[i];
+            const file = this.app.vault.getAbstractFileByPath(itemPath);
+            if (file) {
+                try {
+                    const metadata = this.app.metadataCache.getFileCache(file);
+                    const content = await this.app.vault.read(file);
                     
-                    if (file) {
-                        try {
-                            const metadata = this.app.metadataCache.getFileCache(file);
-                            const content = await this.app.vault.read(file);
-                            
-                            // Extract price, description, and consumable status
-                            const priceMatch = content.match(/\((\d+)\s+#price\)/);
-                            const descMatch = content.match(/\(([^)]+)\s+#description\)/);
-                            const consumableMatch = content.match(/(\d+)\/(\d+)\s+#consumable/);
-                            const isConsumable = content.includes("#consumable");
-                            
-                            // Create the item with limited stock for random items
-                            this.shopItems.push({
-                                name: file.basename,
-                                file: file,
-                                price: this.plugin.settings.itemCurrentPrice?.[itemPath] ||
-                                       (metadata?.frontmatter?.price) || 
-                                       (priceMatch ? parseInt(priceMatch[1]) : Math.floor(Math.random() * 90) + 10),
-                                description: (metadata?.frontmatter?.description) || 
-                                            (descMatch ? descMatch[1] : "Rare find!"),
-                                stock: this.plugin.settings.shopStock[itemPath] || 
-                                       Math.floor(Math.random() * 3) + 1, // 1-3 stock for random items
-                                isConsumable: isConsumable,
-                                currentUses: consumableMatch ? parseInt(consumableMatch[1]) : 1,
-                                maxUses: consumableMatch ? parseInt(consumableMatch[2]) : 1,
-                                isRare: true // Mark as a rare/random item
-                            });
-                        } catch (error) {
-                            console.error("Error loading random item:", error);
-                        }
-                    }
+                    this.shopItems.push({
+                        name: file.basename,
+                        file: file,
+                        price: this.plugin.settings.itemCurrentPrice?.[itemPath] ||
+                               (metadata?.frontmatter?.price) ||
+                               Math.floor(Math.random() * 90) + 10,
+                        description: (metadata?.frontmatter?.description) || "Rare find!",
+                        stock: Math.floor(Math.random() * 3) + 1,
+                        isConsumable: content.includes("#consumable"),
+                        isRare: true
+                    });
+                } catch (error) {
+                    console.error("Error loading random item:", error);
                 }
             }
         }
+    }
+}
+
     }
     
     async onOpen() {
