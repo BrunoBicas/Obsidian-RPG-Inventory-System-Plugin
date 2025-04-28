@@ -705,58 +705,7 @@ class RPGInventorySettingTab extends PluginSettingTab {
             }
         });
         
-        
-       // Custom Shop Creation
-       containerEl.createEl('h3', { text: 'Custom Shop Creator' });
-       const customShopDiv = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop' });
-
-       const customShopButton = customShopDiv.createEl('button', { 
-        text: 'Create Custom Shop', 
-       cls: 'mod-cta' 
-       });
-       customShopButton.addEventListener('click', () => {
-       new CustomShopCreatorModal(this.app, this.plugin).open();
-       });
-
-        // Display existing custom shops
-        if (this.plugin.settings.customShops && this.plugin.settings.customShops.length > 0) {
-        const customShopList = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop-list' });
     
-        this.plugin.settings.customShops.forEach((shop, index) => {
-        const shopDiv = customShopList.createEl('div', { cls: 'rpg-inventory-shop-item' });
-        
-        const shopInfo = shopDiv.createEl('div', { cls: 'rpg-inventory-shop-info' });
-        shopInfo.createEl('span', { text: shop.name, cls: 'shop-name' });
-        shopInfo.createEl('span', { 
-            text: `Fixed Items: ${shop.fixedItems.length}, Random Pool: ${shop.randomPool.length}`, 
-            cls: 'shop-details' 
-        });
-        
-        const deleteButton = shopDiv.createEl('button', { text: 'Remove' });
-        deleteButton.addEventListener('click', async () => {
-            this.plugin.settings.customShops.splice(index, 1);
-            await this.plugin.saveSettings();
-            this.display(); // Refresh settings panel
-        });
-
-        const editButton = shopDiv.createEl('button', { text: 'Edit' });
-        editButton.addEventListener('click', async () => {
-        const editModal = new CustomShopCreatorModal(this.app, this.plugin);
-        editModal.customShop = JSON.parse(JSON.stringify(shop)); // Copia o shop
-        editModal.open();
-    
-        // Quando salvar, substitui o antigo
-        const originalSave = editModal.saveCustomShop;
-        editModal.saveCustomShop = async () => {
-        this.plugin.settings.customShops[index] = editModal.customShop;
-        await this.plugin.saveSettings();
-        this.display(); // Atualiza a lista
-        editModal.close();
-       };
-       });
-
-    });
-}
 
         // List existing shops
         const shopList = containerEl.createEl('div', { cls: 'rpg-inventory-shop-list' });
@@ -898,11 +847,67 @@ class RPGInventorySettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                         this.display();
                     }));       
-    }
-}
+                     // Custom Shop Creation
+       containerEl.createEl('h3', { text: 'Custom Shop Creator' });
+       const customShopDiv = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop' });
 
-// Default settings
-const DEFAULT_SETTINGS = {
+       const customShopButton = customShopDiv.createEl('button', { 
+        text: 'Create Custom Shop', 
+       cls: 'mod-cta' 
+       });
+       customShopButton.addEventListener('click', () => {
+       new CustomShopCreatorModal(this.app, this.plugin).open();
+       });
+
+        // Display existing custom shops
+        if (this.plugin.settings.customShops && this.plugin.settings.customShops.length > 0) {
+        const customShopList = containerEl.createEl('div', { cls: 'rpg-inventory-custom-shop-list' });
+    
+        this.plugin.settings.customShops.forEach((shop, index) => {
+        const shopDiv = customShopList.createEl('div', { cls: 'rpg-inventory-shop-item' });
+        
+        const shopInfo = shopDiv.createEl('div', { cls: 'rpg-inventory-shop-info' });
+        shopInfo.createEl('span', { text: shop.name, cls: 'shop-name' });
+        const fixedCount = Array.isArray(shop.fixedItems) ? shop.fixedItems.length : 0;
+const poolCount = Array.isArray(shop.randomPools) ? shop.randomPools.length : 0; // <--- Corrigido para randomPools
+
+shopInfo.createEl('span', {
+    // text: `Fixed Items: ${shop.fixedItems.length}, Random Pool: ${shop.randomPool.length}`, // Linha antiga [cite: 177]
+    text: `Fixed Items: ${fixedCount}, Random Pools: ${poolCount}`, // <--- Linha Corrigida
+    cls: 'shop-details'
+});
+        
+        const deleteButton = shopDiv.createEl('button', { text: 'Remove' });
+        deleteButton.addEventListener('click', async () => {
+            this.plugin.settings.customShops.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display(); // Refresh settings panel
+        });
+
+        const editButton = shopDiv.createEl('button', { text: 'Edit' });
+        editButton.addEventListener('click', async () => {
+        const editModal = new CustomShopCreatorModal(this.app, this.plugin);
+        editModal.customShop = JSON.parse(JSON.stringify(shop)); // Copia o shop
+        editModal.open();
+    
+        // Quando salvar, substitui o antigo
+        const originalSave = editModal.saveCustomShop;
+        editModal.saveCustomShop = async () => {
+        this.plugin.settings.customShops[index] = editModal.customShop;
+        await this.plugin.saveSettings();
+        this.display(); // Atualiza a lista
+        editModal.close();
+         };
+       });
+
+    });
+ }    
+    }
+ }
+   
+
+ // Default settings
+ const DEFAULT_SETTINGS = {
     coins: 1000,
     inventory: [],
     customShops: [
@@ -939,16 +944,16 @@ const DEFAULT_SETTINGS = {
     restockDays: 3, // Restock every 3 days by default
     priceVariation: 0.3, // 30% price variation
     itemCurrentPrice: {}, // Will store item path -> current price
-};
+ };
 
-class ShopSelectionModal extends Modal {
+ class ShopSelectionModal extends Modal {
     constructor(app, plugin) {
         super(app);
         this.plugin = plugin;
     }
 
 
-onOpen() {
+ onOpen() {
     const { contentEl } = this;
     contentEl.empty();
     
@@ -998,15 +1003,15 @@ onOpen() {
         this.close();
         new InventoryModal(this.app, this.plugin).open();
     });
-}
+ }
 
     onClose() {
         const { contentEl } = this;
         contentEl.empty();
     }
 }
-// Add this as a new class after the ShopSelectionModal class, around line 839:
-class CustomShopCreatorModal extends Modal {
+ // Add this as a new class after the ShopSelectionModal class, around line 839:
+ class CustomShopCreatorModal extends Modal {
     constructor(app, plugin) {
         super(app);
         this.plugin = plugin;
@@ -1034,14 +1039,14 @@ class CustomShopCreatorModal extends Modal {
         const controlsDiv = poolDiv.createEl('div', { cls: 'pool-controls' });
 
         // Campo para o Nome da Random Pool
-const nameInput = container.createEl('input', { 
+ const nameInput = container.createEl('input', { 
     type: 'text', 
     placeholder: 'Pool Name (ex: Itens Raros)', 
     cls: 'input-pool-name' 
-});
-nameInput.addEventListener('change', () => {
+ });
+ nameInput.addEventListener('change', () => {
     pool.name = nameInput.value;
-});
+ });
     
         const chanceInput = controlsDiv.createEl('input', { type: 'number', value: 30, placeholder: 'Chance %' });
         chanceInput.addEventListener('change', () => {
@@ -1229,20 +1234,20 @@ nameInput.addEventListener('change', () => {
         updateFixedList();
 
         const randomPoolsDiv = contentEl.createEl('div', { cls: 'random-pools-container' });
-randomPoolsDiv.createEl('h3', { text: 'Random Pools' });
+ randomPoolsDiv.createEl('h3', { text: 'Random Pools' });
 
-const addPoolButton = randomPoolsDiv.createEl('button', { 
+ const addPoolButton = randomPoolsDiv.createEl('button', { 
     text: 'Add New Random Pool', 
     cls: 'mod-cta' 
-});
-addPoolButton.addEventListener('click', () => {
+ });
+ addPoolButton.addEventListener('click', () => {
     this.addRandomPool(randomPoolsDiv);
-});
+ });
 
-// Render pools existentes
-this.customShop.randomPools.forEach(() => {
+ // Render pools existentes
+ this.customShop.randomPools.forEach(() => {
     this.addRandomPool(randomPoolsDiv);
-});
+ });
 
 
 
@@ -1280,13 +1285,13 @@ this.customShop.randomPools.forEach(() => {
         };
         const saveButton = contentEl.createEl('button', { cls: 'mod-cta save-custom-shop' });
 
-const saveIcon = saveButton.createEl('span', { cls: 'save-icon' });
-saveIcon.innerText = '💾'; // Ícone de disquete (salvar)
+ const saveIcon = saveButton.createEl('span', { cls: 'save-icon' });
+ saveIcon.innerText = '💾'; // Ícone de disquete (salvar)
 
-const saveText = saveButton.createEl('span');
-saveText.innerText = ' Save Custom Shop';
+ const saveText = saveButton.createEl('span');
+ saveText.innerText = ' Save Custom Shop';
 
-saveButton.addEventListener('click', async () => {
+ saveButton.addEventListener('click', async () => {
     if (!this.customShop.name) {
         new Notice('Please enter a shop name');
         return;
@@ -1305,19 +1310,12 @@ saveButton.addEventListener('click', async () => {
     }
 
     await this.plugin.saveSettings();
-
-    // 🔥 Reopen Settings fully!
-    this.plugin.app.setting.open();
-    setTimeout(() => {
-        this.plugin.app.setting.openTabById('Obsidian-RPG-Inventory-System-Plugin'); // <-- Make sure this is your correct ID
-    }, 100);
-
     new Notice(`Custom shop "${this.customShop.name}" saved!`);
     this.close();
-});
+ });
 
 
-        updateRandomList();
+       
         
     }       
         
