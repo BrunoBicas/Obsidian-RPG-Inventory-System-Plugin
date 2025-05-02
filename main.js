@@ -669,7 +669,7 @@ class RPGInventorySettingTab extends PluginSettingTab {
         containerEl.createEl('h3', { text: 'Item Folders' });
 
         // Shop management section
-        containerEl.createEl('h3', { text: 'Shop Management' });
+        containerEl.createEl('h3', { text: 'Custon Shop Management' });
         
         // Display current folders with delete buttons
         const folderList = containerEl.createEl('div', { cls: 'rpg-inventory-folder-list' });
@@ -704,7 +704,7 @@ class RPGInventorySettingTab extends PluginSettingTab {
                 this.display(); // Refresh settings panel
             }
         });
-        
+        containerEl.createEl('h3', { text: 'Normal Shop Management' });
     
 
         // List existing shops
@@ -1145,25 +1145,49 @@ shopInfo.createEl('span', {
         
         noteButton.addEventListener('click', async () => {
             const files = this.app.vault.getMarkdownFiles();
-            
-            // Create a file selector modal
+        
             const fileModal = new Modal(this.app);
             fileModal.titleEl.setText('Select Shop Note');
-            
-            const fileList = fileModal.contentEl.createEl('div', { cls: 'file-selector-list' });
-            
-            files.forEach(file => {
-                const fileItem = fileList.createEl('div', { cls: 'file-item' });
-                fileItem.setText(file.path);
-                fileItem.addEventListener('click', () => {
-                    this.customShop.shopNote = file.path;
-                    noteLabel.setText(file.path);
-                    fileModal.close();
-                });
+        
+            const searchInput = fileModal.contentEl.createEl('input', {
+                type: 'text',
+                placeholder: 'Search notes...',
+                cls: 'shop-note-search'
             });
-            
+        
+            const fileList = fileModal.contentEl.createEl('div', { cls: 'file-selector-list' });
+        
+            const renderList = (filter = '') => {
+                fileList.empty();
+        
+                const filtered = filter
+                    ? files.filter(file => file.path.toLowerCase().includes(filter.toLowerCase()))
+                    : files;
+        
+                filtered.forEach(file => {
+                    const fileItem = fileList.createEl('div', { cls: 'file-item' });
+                    fileItem.setText(file.path);
+                    fileItem.addEventListener('click', () => {
+                        this.customShop.shopNote = file.path;
+                        noteLabel.setText(file.path);
+                        fileModal.close();
+                    });
+                });
+        
+                if (filtered.length === 0) {
+                    fileList.createEl('div', { text: 'No matching notes found.', cls: 'no-matches' });
+                }
+            };
+        
+            renderList();
+        
+            searchInput.addEventListener('input', () => {
+                renderList(searchInput.value);
+            });
+        
             fileModal.open();
         });
+        
         
         // Random item settings
         const randomDiv = basicInfoDiv.createEl('div', { cls: 'setting-item' });
@@ -1485,6 +1509,7 @@ for (const pool of this.customShop.randomPools) {
         }
         
         contentEl.createEl('h2', { text: this.customShop.name });
+        
         contentEl.createEl('p', { text: this.customShop.description, cls: 'shop-description' });
         
         // Display coins
