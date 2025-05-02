@@ -910,6 +910,7 @@ shopInfo.createEl('span', {
  const DEFAULT_SETTINGS = {
     coins: 1000,
     inventory: [],
+    customTreasures: [],
     customShops: [
         {
             name: '',
@@ -1511,6 +1512,14 @@ for (const pool of this.customShop.randomPools) {
         contentEl.createEl('h2', { text: this.customShop.name });
         
         contentEl.createEl('p', { text: this.customShop.description, cls: 'shop-description' });
+        
+        // Shop note link
+        const openNoteButton = contentEl.createEl('button', { text: 'Open Shop Note 📝', cls: 'mod-cta' });
+        openNoteButton.addEventListener('click', () => {
+            const file = this.app.vault.getAbstractFileByPath(this.customShop.shopNote);
+            if (file) this.app.workspace.getLeaf().openFile(file);
+        });
+        
         
         // Display coins
         const coinDisplay = contentEl.createEl('div', { cls: 'shop-coins' });
